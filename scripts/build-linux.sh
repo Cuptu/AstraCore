@@ -19,8 +19,9 @@ build_root="$ASTRACORE_REPO/artifacts/astracore-build/linux-x64"
 prefix="$build_root/prefix"
 rm -rf "$build_root" "$ASTRACORE_OUTPUT"
 mkdir -p "$build_root" "$prefix" "$ASTRACORE_OUTPUT"
-export PKG_CONFIG_PATH="$prefix/lib/pkgconfig:$prefix/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-/usr/lib/pkgconfig:/usr/share/pkgconfig}"
+export PKG_CONFIG_PATH="$prefix/lib/pkgconfig:$prefix/lib/x86_64-linux-gnu/pkgconfig:$prefix/share/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 export LD_LIBRARY_PATH="$prefix/lib:$prefix/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
+
 
 echo "==> Building minimal HarfBuzz (FreeType shaper)..."
 meson setup "$build_root/harfbuzz" "$ASTRACORE_HARFBUZZ_SOURCE" \

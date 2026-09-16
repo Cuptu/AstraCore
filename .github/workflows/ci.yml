@@ -115,12 +115,25 @@ jobs:
       - name: Build AstraCore (Linux)
         if: runner.os == 'Linux'
         shell: bash
-        run: bash ./scripts/build-linux.sh
+        run: |
+          set -o pipefail
+          bash ./scripts/build-linux.sh 2>&1 | tee build.log || (echo "=== BUILD FAILED: LAST 150 LINES ===" && tail -n 150 build.log && exit 1)
 
       - name: Build AstraCore (macOS)
         if: runner.os == 'macOS'
         shell: bash
-        run: bash ./scripts/build-macos.sh
+        run: |
+          set -o pipefail
+          bash ./scripts/build-macos.sh 2>&1 | tee build.log || (echo "=== BUILD FAILED: LAST 150 LINES ===" && tail -n 150 build.log && exit 1)
+
+      - name: Upload Build Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.rid }}
+          path: build.log
+          if-no-files-found: ignore
+
 
       # Manifest & Verification
       - name: Generate Runtime Manifest
