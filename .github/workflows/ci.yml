@@ -110,21 +110,41 @@ jobs:
       - name: Build AstraCore (Windows)
         if: runner.os == 'Windows'
         shell: msys2 {0}
-        run: bash ./scripts/build-windows.sh
+        run: |
+          set -o pipefail
+          bash ./scripts/build-windows.sh 2>&1 | tee build.log || {
+            echo "### Build Failed: Windows (${{ matrix.rid }})" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 120 build.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
 
       - name: Build AstraCore (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
           set -o pipefail
-          bash ./scripts/build-linux.sh 2>&1 | tee build.log || (echo "=== BUILD FAILED: LAST 150 LINES ===" && tail -n 150 build.log && exit 1)
+          bash ./scripts/build-linux.sh 2>&1 | tee build.log || {
+            echo "### Build Failed: Linux (${{ matrix.rid }})" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 120 build.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
 
       - name: Build AstraCore (macOS)
         if: runner.os == 'macOS'
         shell: bash
         run: |
           set -o pipefail
-          bash ./scripts/build-macos.sh 2>&1 | tee build.log || (echo "=== BUILD FAILED: LAST 150 LINES ===" && tail -n 150 build.log && exit 1)
+          bash ./scripts/build-macos.sh 2>&1 | tee build.log || {
+            echo "### Build Failed: macOS (${{ matrix.rid }})" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 120 build.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
 
       - name: Upload Build Log on Failure
         if: failure()
