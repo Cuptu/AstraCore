@@ -79,7 +79,7 @@ jobs:
             libva-dev libvdpau-dev libdrm-dev libx11-dev libxrandr-dev \
             libasound2-dev libpulse-dev libfreetype-dev libfribidi-dev \
             libfontconfig-dev libx264-dev libsvtav1-dev libsvtav1enc-dev libunibreak-dev \
-            liblcms2-dev zlib1g-dev libvulkan-dev
+            liblcms2-dev zlib1g-dev libvulkan-dev libgnutls28-dev
 
       # macOS Dependencies
       - name: Install System Dependencies (macOS)
@@ -88,7 +88,7 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: "1"
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: |
-          for pkg in meson nasm fribidi freetype x264 svt-av1 little-cms2; do
+          for pkg in meson nasm fribidi freetype x264 svt-av1 little-cms2 vulkan-headers; do
             brew install "$pkg" || brew link --overwrite "$pkg" || true
           done
           brew_python="$(brew --prefix 2>/dev/null || echo /opt/homebrew)/bin/python3"
