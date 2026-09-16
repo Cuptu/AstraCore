@@ -61,7 +61,7 @@ def main():
     if not libmpv_name:
         sys.exit(f"Error: Missing libmpv binary in {runtime_dir}")
 
-    native_candidates = ["AstraCore.Native.dll"] if is_win else (["libAstraCore.Native.dylib"] if is_mac else ["libAstraCore.Native.so"])
+    native_candidates = ["AstraCore.Native.dll"] if is_win else (["libAstraCore.Native.dylib", "libAstraCore.Native.1.dylib"] if is_mac else ["libAstraCore.Native.so", "libAstraCore.Native.so.1"])
     native_name = next((c for c in native_candidates if os.path.isfile(os.path.join(runtime_dir, c))), None)
     if not native_name:
         sys.exit(f"Error: Missing AstraCore.Native shared library in {runtime_dir}")
