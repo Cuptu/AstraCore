@@ -88,9 +88,10 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: "1"
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: |
-          for pkg in meson nasm fribidi freetype libx264 svt-av1 little-cms2; do
+          for pkg in meson nasm fribidi freetype x264 svt-av1 little-cms2; do
             brew install "$pkg" || brew link --overwrite "$pkg" || true
           done
+
 
 
 
