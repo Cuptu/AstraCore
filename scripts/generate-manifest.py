@@ -16,7 +16,12 @@ def sha256_file(filepath):
 
 def get_tool_version(tool_path):
     try:
-        out = subprocess.check_output([tool_path, "-hide_banner", "-version"], stderr=subprocess.STDOUT, text=True)
+        tool_dir = os.path.dirname(os.path.abspath(tool_path))
+        env = os.environ.copy()
+        env["PATH"] = f"{tool_dir}{os.pathsep}{env.get('PATH', '')}"
+        env["LD_LIBRARY_PATH"] = f"{tool_dir}{os.pathsep}{env.get('LD_LIBRARY_PATH', '')}"
+        env["DYLD_LIBRARY_PATH"] = f"{tool_dir}{os.pathsep}{env.get('DYLD_LIBRARY_PATH', '')}"
+        out = subprocess.check_output([tool_path, "-hide_banner", "-version"], stderr=subprocess.STDOUT, text=True, env=env)
         return out.strip().splitlines()[0]
     except Exception as e:
         print(f"Warning: Failed to get version from {tool_path}: {e}", file=sys.stderr)
