@@ -38,9 +38,10 @@ meson setup "$build_root/harfbuzz" "$ASTRACORE_HARFBUZZ_SOURCE" \
     -Dintrospection=disabled -Dglib=disabled -Dgobject=disabled \
     -Dcairo=disabled -Dchafa=disabled -Dpng=disabled -Dicu=disabled \
     -Dgraphite=disabled -Dgraphite2=disabled -Dfreetype=enabled \
-    -Dcoretext=enabled -Dfontconfig=disabled -Dzlib=enabled
+    -Dcoretext=enabled -Dzlib=enabled
 meson compile -C "$build_root/harfbuzz"
 meson install -C "$build_root/harfbuzz"
+
 
 echo "==> Building libass with CoreText support (no Fontconfig)..."
 meson setup "$build_root/libass" "$ASTRACORE_LIBASS_SOURCE" \
@@ -109,8 +110,10 @@ meson setup "$build_root/mpv" "$ASTRACORE_MPV_SOURCE" \
     -Dlua=disabled -Djavascript=disabled -Dcplugins=disabled \
     -Dlibavdevice=disabled -Dplain-gl=enabled -Dgl=enabled -Dgl-cocoa=enabled \
     -Dvideotoolbox-gl=enabled -Dcoreaudio=enabled \
+    -Dswift-build=disabled \
     -Diconv=enabled -Djpeg=disabled -Dlcms2=enabled -Dzlib=enabled
 meson compile -C "$build_root/mpv"
+
 meson install -C "$build_root/mpv"
 
 echo "==> Building AstraCore.Native C ABI v4..."

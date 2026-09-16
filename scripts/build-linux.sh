@@ -22,7 +22,7 @@ mkdir -p "$build_root" "$prefix" "$ASTRACORE_OUTPUT"
 export PKG_CONFIG_PATH="$prefix/lib/pkgconfig:$prefix/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-/usr/lib/pkgconfig:/usr/share/pkgconfig}"
 export LD_LIBRARY_PATH="$prefix/lib:$prefix/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 
-echo "==> Building minimal HarfBuzz (Fontconfig/FreeType shaper)..."
+echo "==> Building minimal HarfBuzz (FreeType shaper)..."
 meson setup "$build_root/harfbuzz" "$ASTRACORE_HARFBUZZ_SOURCE" \
     --prefix "$prefix" --buildtype release --default-library shared \
     --wrap-mode nofallback --auto-features disabled \
@@ -30,9 +30,10 @@ meson setup "$build_root/harfbuzz" "$ASTRACORE_HARFBUZZ_SOURCE" \
     -Dintrospection=disabled -Dglib=disabled -Dgobject=disabled \
     -Dcairo=disabled -Dchafa=disabled -Dpng=disabled -Dicu=disabled \
     -Dgraphite=disabled -Dgraphite2=disabled -Dfreetype=enabled \
-    -Dfontconfig=enabled -Dzlib=enabled
+    -Dzlib=enabled
 meson compile -C "$build_root/harfbuzz"
 meson install -C "$build_root/harfbuzz"
+
 
 echo "==> Building libass with Fontconfig support..."
 meson setup "$build_root/libass" "$ASTRACORE_LIBASS_SOURCE" \
