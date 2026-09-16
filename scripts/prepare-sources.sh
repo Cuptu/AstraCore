@@ -30,7 +30,10 @@ get_pinned_source() {
     fi
 
     echo "==> Fetching pinned commit $commit for $name..."
-    git -C "$target_dir" fetch --depth 1 origin "$commit"
+    if ! git -C "$target_dir" fetch --depth 1 origin "$commit" 2>/dev/null; then
+        echo "Direct shallow commit fetch rejected or failed for $name, fetching branch heads from origin..."
+        git -C "$target_dir" fetch origin
+    fi
     git -C "$target_dir" checkout --detach "$commit"
 
     local actual

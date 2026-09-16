@@ -22,19 +22,22 @@ jobs:
         include:
           - rid: win-x64
             os: windows-latest
+            archive_format: zip
             archive_ext: zip
           - rid: linux-x64
             os: ubuntu-24.04
+            archive_format: gztar
             archive_ext: tar.gz
           - rid: osx-arm64
             os: macos-latest
+            archive_format: gztar
             archive_ext: tar.gz
 
     steps:
       - name: Checkout AstraCore
         uses: actions/checkout@v4
 
-      # Windows Setup
+      # Windows Toolchain
       - name: Setup MSYS2 CLANG64 (Windows)
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
@@ -65,7 +68,7 @@ jobs:
             mingw-w64-clang-x86_64-lcms2
             mingw-w64-clang-x86_64-zlib
 
-      # Linux Setup
+      # Linux Dependencies
       - name: Install System Dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -78,32 +81,41 @@ jobs:
             libfontconfig-dev libx264-dev libsvtav1-dev libunibreak-dev \
             liblcms2-dev zlib1g-dev libvulkan-dev
 
-      # macOS Setup
+      # macOS Dependencies
       - name: Install System Dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
           brew update
           brew install meson ninja cmake pkg-config nasm fribidi freetype libx264 svt-av1 little-cms2
 
-      - name: Prepare Pinned Source Trees
-        shell: bash
-        run: ./scripts/prepare-sources.sh
+      # Prepare Sources
+      - name: Prepare Pinned Source Trees (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: bash ./scripts/prepare-sources.sh
 
+      - name: Prepare Pinned Source Trees (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash ./scripts/prepare-sources.sh
+
+      # Build Runtime
       - name: Build AstraCore (Windows)
         if: runner.os == 'Windows'
         shell: msys2 {0}
-        run: ./scripts/build-windows.sh
+        run: bash ./scripts/build-windows.sh
 
       - name: Build AstraCore (Linux)
         if: runner.os == 'Linux'
         shell: bash
-        run: ./scripts/build-linux.sh
+        run: bash ./scripts/build-linux.sh
 
       - name: Build AstraCore (macOS)
         if: runner.os == 'macOS'
         shell: bash
-        run: ./scripts/build-macos.sh
+        run: bash ./scripts/build-macos.sh
 
+      # Manifest & Verification
       - name: Generate Runtime Manifest
         shell: bash
         run: |
@@ -114,16 +126,12 @@ jobs:
         run: |
           python3 ./scripts/verify-runtime.py --runtime-dir "artifacts/astracore/${{ matrix.rid }}"
 
+      # Packaging
       - name: Package Runtime Archive
         shell: bash
         run: |
           mkdir -p dist
-          pkg_name="AstraCore-${{ matrix.rid }}"
-          if [[ "${{ matrix.archive_ext }}" == "zip" ]]; then
-            (cd "artifacts/astracore/${{ matrix.rid }}" && 7z a "../../../dist/${pkg_name}.zip" *)
-          else
-            tar -czvf "dist/${pkg_name}.tar.gz" -C "artifacts/astracore/${{ matrix.rid }}" .
-          fi
+          python3 -c "import shutil, sys; shutil.make_archive(sys.argv[1], sys.argv[2], sys.argv[3])" "dist/AstraCore-${{ matrix.rid }}" "${{ matrix.archive_format }}" "artifacts/astracore/${{ matrix.rid }}"
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
