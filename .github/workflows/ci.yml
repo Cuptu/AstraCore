@@ -1,0 +1,160 @@
+name: AstraCore Multiplatform CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.rid }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+            archive_ext: zip
+          - rid: linux-x64
+            os: ubuntu-24.04
+            archive_ext: tar.gz
+          - rid: osx-arm64
+            os: macos-latest
+            archive_ext: tar.gz
+
+    steps:
+      - name: Checkout AstraCore
+        uses: actions/checkout@v4
+
+      # Windows Setup
+      - name: Setup MSYS2 CLANG64 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: true
+          install: >-
+            base-devel git patch
+            mingw-w64-clang-x86_64-toolchain
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-meson
+            mingw-w64-clang-x86_64-ninja
+            mingw-w64-clang-x86_64-python-jinja
+            mingw-w64-clang-x86_64-vulkan-headers
+            mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-nasm
+            mingw-w64-clang-x86_64-yasm
+            mingw-w64-clang-x86_64-freetype
+            mingw-w64-clang-x86_64-fribidi
+            mingw-w64-clang-x86_64-harfbuzz
+            mingw-w64-clang-x86_64-libunibreak
+            mingw-w64-clang-x86_64-x264
+            mingw-w64-clang-x86_64-svt-av1
+            mingw-w64-clang-x86_64-ffnvcodec-headers
+            mingw-w64-clang-x86_64-amf-headers
+            mingw-w64-clang-x86_64-libvpl
+            mingw-w64-clang-x86_64-angleproject
+            mingw-w64-clang-x86_64-lcms2
+            mingw-w64-clang-x86_64-zlib
+
+      # Linux Setup
+      - name: Install System Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang llvm meson ninja-build cmake pkg-config \
+            nasm yasm patchelf git patch tar python3 python3-pip \
+            libva-dev libvdpau-dev libdrm-dev libx11-dev libxrandr-dev \
+            libasound2-dev libpulse-dev libfreetype-dev libfribidi-dev \
+            libfontconfig-dev libx264-dev libsvtav1-dev libunibreak-dev \
+            liblcms2-dev zlib1g-dev libvulkan-dev
+
+      # macOS Setup
+      - name: Install System Dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install meson ninja cmake pkg-config nasm fribidi freetype libx264 svt-av1 little-cms2
+
+      - name: Prepare Pinned Source Trees
+        shell: bash
+        run: ./scripts/prepare-sources.sh
+
+      - name: Build AstraCore (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: ./scripts/build-windows.sh
+
+      - name: Build AstraCore (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: ./scripts/build-linux.sh
+
+      - name: Build AstraCore (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: ./scripts/build-macos.sh
+
+      - name: Generate Runtime Manifest
+        shell: bash
+        run: |
+          python3 ./scripts/generate-manifest.py --runtime-dir "artifacts/astracore/${{ matrix.rid }}" --rid "${{ matrix.rid }}"
+
+      - name: Verify Runtime Integrity
+        shell: bash
+        run: |
+          python3 ./scripts/verify-runtime.py --runtime-dir "artifacts/astracore/${{ matrix.rid }}"
+
+      - name: Package Runtime Archive
+        shell: bash
+        run: |
+          mkdir -p dist
+          pkg_name="AstraCore-${{ matrix.rid }}"
+          if [[ "${{ matrix.archive_ext }}" == "zip" ]]; then
+            (cd "artifacts/astracore/${{ matrix.rid }}" && 7z a "../../../dist/${pkg_name}.zip" *)
+          else
+            tar -czvf "dist/${pkg_name}.tar.gz" -C "artifacts/astracore/${{ matrix.rid }}" .
+          fi
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AstraCore-${{ matrix.rid }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish Release Assets
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Compute SHA-256 Checksums
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
