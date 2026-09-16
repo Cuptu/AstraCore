@@ -79,7 +79,7 @@ jobs:
             libva-dev libvdpau-dev libdrm-dev libx11-dev libxrandr-dev \
             libasound2-dev libpulse-dev libfreetype-dev libfribidi-dev \
             libfontconfig-dev libx264-dev libsvtav1-dev libsvtav1enc-dev libunibreak-dev \
-            liblcms2-dev zlib1g-dev libvulkan-dev libgnutls28-dev
+            liblcms2-dev zlib1g-dev libvulkan-dev libgnutls28-dev libegl-dev libgl-dev
 
       # macOS Dependencies
       - name: Install System Dependencies (macOS)
