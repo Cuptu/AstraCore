@@ -135,7 +135,7 @@ meson compile -C "$build_root/mpv"
 
 meson install -C "$build_root/mpv"
 
-echo "==> Building AstraCore.Native C ABI v4..."
+echo "==> Building AstraCore.Native C ABI v5..."
 cmake -S "$ASTRACORE_REPO" -B "$build_root/native" -G Ninja \
     -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$prefix" -DCMAKE_INSTALL_PREFIX="$prefix"
 cmake --build "$build_root/native"

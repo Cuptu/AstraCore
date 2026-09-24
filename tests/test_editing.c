@@ -8,9 +8,21 @@ int main(void)
     char err[256];
     memset(err, 0, sizeof(err));
 
-    // 1. Verify ABI version 4
-    if (ac_abi_version() != 4u) {
-        fprintf(stderr, "ABI version mismatch: expected 4, got %u\n", ac_abi_version());
+    // 1. Verify ABI and semantic versions
+    if (ac_abi_version() != AC_ABI_VERSION) {
+        fprintf(stderr, "ABI version mismatch: expected %u, got %u\n", AC_ABI_VERSION, ac_abi_version());
+        return 1;
+    }
+    if (ac_version() != AC_BUILD_VERSION) {
+        fprintf(stderr, "Semantic version mismatch: expected 0x%08X, got 0x%08X\n", AC_BUILD_VERSION, ac_version());
+        return 1;
+    }
+    if (strcmp(ac_version_string(), "5.0.0") != 0) {
+        fprintf(stderr, "Version string mismatch: %s\n", ac_version_string());
+        return 1;
+    }
+    if (ac_has_feature("keyframes") != 1 || ac_has_feature("__invalid_tag__") != 0) {
+        fprintf(stderr, "Feature query check failed\n");
         return 1;
     }
 
@@ -36,6 +48,6 @@ int main(void)
         return 5;
     }
 
-    printf("AstraCore ABI v4 editing and speed tests passed.\n");
+    printf("AstraCore ABI v%u editing and speed tests passed.\n", AC_ABI_VERSION);
     return 0;
 }
