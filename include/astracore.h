@@ -19,11 +19,36 @@ extern "C" {
 #endif
 
 /*
- * AstraCore Binary Interface (ABI) revision.
- * Monotonically incremented when exported symbol contracts or struct layouts
- * are expanded. Checked at runtime by host applications via ac_abi_version().
+ * AstraCore Semantic Versioning and Binary Interface (ABI) Specification.
+ *
+ * Versioning model:
+ *   - MAJOR (high 16 bits): Incremented on breaking ABI changes (e.g. struct layout changes
+ *     without backward fallback, removed symbols, altered calling conventions).
+ *   - MINOR (middle 8 bits): Incremented on backward-compatible feature additions
+ *     (new exported functions, new enum values, extended optional capabilities).
+ *   - PATCH (low 8 bits): Incremented on internal bug fixes, optimizations, or codec updates.
+ *
+ * Legacy Compatibility:
+ *   ac_abi_version() continues to return AC_VERSION_MAJOR (currently 5u) to preserve
+ *   the original scalar contract.
+ *   Callers desiring full semantic versioning can invoke ac_version() or ac_version_string().
+ *   Callers checking feature availability should invoke ac_has_feature().
  */
-#define AC_ABI_VERSION 5u
+#define AC_VERSION_MAJOR 5u
+#define AC_VERSION_MINOR 0u
+#define AC_VERSION_PATCH 0u
+
+#define AC_VERSION_INT(major, minor, patch) \
+    (((uint32_t)(major) << 16) | ((uint32_t)(minor) << 8) | ((uint32_t)(patch)))
+
+#define AC_BUILD_VERSION AC_VERSION_INT(AC_VERSION_MAJOR, AC_VERSION_MINOR, AC_VERSION_PATCH)
+
+#define AC_GET_MAJOR(v) (((uint32_t)(v) >> 16) & 0xFFFFu)
+#define AC_GET_MINOR(v) (((uint32_t)(v) >> 8)  & 0xFFu)
+#define AC_GET_PATCH(v) (((uint32_t)(v))       & 0xFFu)
+
+/* Legacy single-scalar ABI definition */
+#define AC_ABI_VERSION AC_VERSION_MAJOR
 
 /*
  * Cancellation callback: returns nonzero when cancellation is requested.
@@ -41,7 +66,31 @@ typedef struct ac_media_info {
     int32_t has_audio;
 } ac_media_info;
 
+/* Returns legacy major ABI revision (e.g., 5u). */
 AC_API uint32_t ac_abi_version(void);
+
+/* Returns packed semantic 32-bit version: (major << 16) | (minor << 8) | patch. */
+AC_API uint32_t ac_version(void);
+
+/* Returns human-readable version string, e.g. "5.0.0". */
+AC_API const char *ac_version_string(void);
+
+/*
+ * Queries runtime feature availability by tag string.
+ * Returns 1 if supported, 0 if unsupported, or -1 on invalid argument.
+ *
+ * Supported tags:
+ *   - "keyframes"       : ac_extract_keyframes_utf8 / _cancel_utf8
+ *   - "frame_grabber"   : ac_grab_frame_image_utf8 / _cancel_utf8
+ *   - "timecodes"       : ac_extract_timecodes_utf8 / _cancel_utf8
+ *   - "spectrogram"     : ac_extract_spectrogram_utf8 / _cancel_utf8
+ *   - "hdr_prober"      : ac_probe_hdr_utf8 / _cancel_utf8
+ *   - "waveform"        : ac_extract_waveform_peaks_utf8 / _cancel_utf8
+ *   - "audio_tempo"     : ac_change_audio_speed_utf8 / _cancel_utf8
+ *   - "lossless_trim"   : ac_trim_media_utf8 / _cancel_utf8
+ *   - "swscale"         : libswscale pixel conversions
+ */
+AC_API int ac_has_feature(const char *feature_name);
 
 /*
  * Reads container and stream metadata without decoding frames.

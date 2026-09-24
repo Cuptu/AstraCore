@@ -132,7 +132,42 @@ static inline void accum_add_sample(WaveformAccumulator *acc, int16_t s)
 
 uint32_t ac_abi_version(void)
 {
-    return AC_ABI_VERSION;
+    return AC_VERSION_MAJOR;
+}
+
+uint32_t ac_version(void)
+{
+    return AC_BUILD_VERSION;
+}
+
+const char *ac_version_string(void)
+{
+    return "5.0.0";
+}
+
+int ac_has_feature(const char *feature_name)
+{
+    if (!feature_name)
+        return -1;
+    if (strcmp(feature_name, "keyframes") == 0)
+        return 1;
+    if (strcmp(feature_name, "frame_grabber") == 0)
+        return 1;
+    if (strcmp(feature_name, "timecodes") == 0)
+        return 1;
+    if (strcmp(feature_name, "spectrogram") == 0)
+        return 1;
+    if (strcmp(feature_name, "hdr_prober") == 0)
+        return 1;
+    if (strcmp(feature_name, "waveform") == 0)
+        return 1;
+    if (strcmp(feature_name, "audio_tempo") == 0)
+        return 1;
+    if (strcmp(feature_name, "lossless_trim") == 0)
+        return 1;
+    if (strcmp(feature_name, "swscale") == 0)
+        return 1;
+    return 0;
 }
 
 int ac_probe_cancel_utf8(
