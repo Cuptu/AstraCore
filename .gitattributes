@@ -1,0 +1,14 @@
+# Force Linux / Unix LF for shell scripts, python, C sources, and CI workflows
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.in text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.patch text eol=lf
+
+# Keep CRLF only for Windows PowerShell scripts if desired
+*.ps1 text eol=crlf

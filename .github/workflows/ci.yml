@@ -1,0 +1,213 @@
+name: AstraCore Multiplatform CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.rid }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+            archive_format: zip
+            archive_ext: zip
+          - rid: linux-x64
+            os: ubuntu-24.04
+            archive_format: gztar
+            archive_ext: tar.gz
+          - rid: osx-arm64
+            os: macos-latest
+            archive_format: gztar
+            archive_ext: tar.gz
+
+    steps:
+      - name: Checkout AstraCore
+        uses: actions/checkout@v4
+
+      # Windows Toolchain
+      - name: Setup MSYS2 CLANG64 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: true
+          install: >-
+            base-devel git patch
+            mingw-w64-clang-x86_64-toolchain
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-meson
+            mingw-w64-clang-x86_64-ninja
+            mingw-w64-clang-x86_64-python-jinja
+            mingw-w64-clang-x86_64-vulkan-headers
+            mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-nasm
+            mingw-w64-clang-x86_64-yasm
+            mingw-w64-clang-x86_64-freetype
+            mingw-w64-clang-x86_64-fribidi
+            mingw-w64-clang-x86_64-harfbuzz
+            mingw-w64-clang-x86_64-libunibreak
+            mingw-w64-clang-x86_64-x264
+            mingw-w64-clang-x86_64-svt-av1
+            mingw-w64-clang-x86_64-ffnvcodec-headers
+            mingw-w64-clang-x86_64-amf-headers
+            mingw-w64-clang-x86_64-libvpl
+            mingw-w64-clang-x86_64-angleproject
+            mingw-w64-clang-x86_64-lcms2
+            mingw-w64-clang-x86_64-zlib
+
+      # Linux Dependencies
+      - name: Install System Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang llvm meson ninja-build cmake pkg-config \
+            nasm yasm patchelf git patch tar python3 python3-pip python3-jinja2 \
+            libva-dev libvdpau-dev libdrm-dev libx11-dev libxrandr-dev \
+            libasound2-dev libpulse-dev libfreetype-dev libfribidi-dev \
+            libfontconfig-dev libx264-dev libsvtav1-dev libsvtav1enc-dev libunibreak-dev \
+            liblcms2-dev zlib1g-dev libvulkan-dev libgnutls28-dev libegl-dev libgl-dev
+
+      # macOS Dependencies
+      - name: Install System Dependencies (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: |
+          for pkg in meson nasm fribidi freetype x264 svt-av1 little-cms2 vulkan-headers; do
+            brew install "$pkg" || brew link --overwrite "$pkg" || true
+          done
+          brew_python="$(brew --prefix 2>/dev/null || echo /opt/homebrew)/bin/python3"
+          if [[ -x "$brew_python" ]]; then
+            "$brew_python" -m pip install --break-system-packages jinja2 || true
+          fi
+          python3 -m pip install --break-system-packages jinja2 || true
+
+
+
+
+      # Prepare Sources
+      - name: Prepare Pinned Source Trees (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: bash ./scripts/prepare-sources.sh
+
+      - name: Prepare Pinned Source Trees (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash ./scripts/prepare-sources.sh
+
+      # Build Runtime
+      - name: Build AstraCore (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          set -o pipefail
+          bash ./scripts/build-windows.sh 2>&1 | tee build.log || {
+            echo "### Build Failed: Windows (${{ matrix.rid }})" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 120 build.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+
+      - name: Build AstraCore (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -o pipefail
+          bash ./scripts/build-linux.sh 2>&1 | tee build.log || {
+            echo "### Build Failed: Linux (${{ matrix.rid }})" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 120 build.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+
+      - name: Build AstraCore (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -o pipefail
+          bash ./scripts/build-macos.sh 2>&1 | tee build.log || {
+            echo "### Build Failed: macOS (${{ matrix.rid }})" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 120 build.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+
+      - name: Upload Build Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.rid }}
+          path: build.log
+          if-no-files-found: ignore
+
+
+      # Manifest & Verification
+      - name: Generate Runtime Manifest
+        shell: bash
+        run: |
+          python3 ./scripts/generate-manifest.py --runtime-dir "artifacts/astracore/${{ matrix.rid }}" --rid "${{ matrix.rid }}"
+
+      - name: Verify Runtime Integrity
+        shell: bash
+        run: |
+          python3 ./scripts/verify-runtime.py --runtime-dir "artifacts/astracore/${{ matrix.rid }}"
+
+      # Packaging
+      - name: Package Runtime Archive
+        shell: bash
+        run: |
+          mkdir -p dist
+          python3 -c "import shutil, sys; shutil.make_archive(sys.argv[1], sys.argv[2], sys.argv[3])" "dist/AstraCore-${{ matrix.rid }}" "${{ matrix.archive_format }}" "artifacts/astracore/${{ matrix.rid }}"
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AstraCore-${{ matrix.rid }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish Release Assets
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Compute SHA-256 Checksums
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
