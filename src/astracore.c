@@ -1951,9 +1951,9 @@ int ac_probe_hdr_cancel_utf8(
     }
 
     // Probe Content Light Level side data
-    for (int i = 0; i < vstream->nb_side_data; ++i) {
-        if (vstream->side_data[i].type == AV_PKT_DATA_CONTENT_LIGHT_LEVEL) {
-            const AVContentLightMetadata *cll = (const AVContentLightMetadata *)vstream->side_data[i].data;
+    for (int i = 0; i < par->nb_coded_side_data; ++i) {
+        if (par->coded_side_data[i].type == AV_PKT_DATA_CONTENT_LIGHT_LEVEL) {
+            const AVContentLightMetadata *cll = (const AVContentLightMetadata *)par->coded_side_data[i].data;
             if (cll) {
                 result->max_cll = (double)cll->MaxCLL;
                 result->max_fall = (double)cll->MaxFALL;
