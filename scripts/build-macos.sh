@@ -124,10 +124,11 @@ popd >/dev/null
 echo "==> Building libmpv 0.41.0+..."
 meson setup "$build_root/mpv" "$ASTRACORE_MPV_SOURCE" \
     --prefix "$prefix" --buildtype release --default-library shared --auto-features disabled \
+    -Db_lundef=true \
     -Dcplayer=false -Dlibmpv=true -Dbuild-date=false -Dtests=false \
     -Dlua=disabled -Djavascript=disabled -Dcplugins=disabled \
     -Dlibavdevice=disabled -Dplain-gl=enabled -Dgl=enabled \
-    -Dvulkan=disabled -Dcoreaudio=enabled \
+    -Dvulkan=disabled -Dcoreaudio=enabled -Dcocoa=enabled \
     -Dswift-build=disabled \
     -Diconv=enabled -Djpeg=disabled -Dlcms2=enabled -Dzlib=enabled
 meson compile -C "$build_root/mpv"

@@ -11,7 +11,9 @@ import zipfile
 def main():
     archive = Path(sys.argv[1]).resolve()
     with tempfile.TemporaryDirectory(prefix='AstraCore runtime 核验 ') as temporary:
-        destination = Path(temporary)
+        # Windows may return an 8.3 TEMP path; resolve the root as well as entries
+        # before containment checks so its canonical long path compares equally.
+        destination = Path(temporary).resolve()
         if archive.suffix == '.zip':
             with zipfile.ZipFile(archive) as package:
                 for name in package.namelist():
