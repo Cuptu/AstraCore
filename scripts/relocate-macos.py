@@ -4,12 +4,16 @@ import argparse
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 
 
 def run(*args):
-    return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT).strip()
+    try:
+        return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT).strip()
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f"Command failed: {args!r}\n{error.output}") from error
 
 
 def dependencies(binary):
@@ -37,6 +41,7 @@ def main():
         if 'Mach-O' not in run('/usr/bin/file', '-b', str(binary)):
             continue
         binaries.append(binary)
+        binary.chmod(binary.stat().st_mode | stat.S_IWUSR)
         identity_lines = run('/usr/bin/otool', '-D', str(binary)).splitlines()[1:]
         identity = identity_lines[0].strip() if identity_lines else None
         deps = dependencies(binary)
@@ -57,8 +62,8 @@ def main():
         if identity:
             run('/usr/bin/install_name_tool', '-id', '@rpath/' + binary.name, str(binary))
     for binary in binaries:
-        # Strip before signing: either operation changes the signed bytes.
-        run('/usr/bin/strip', '-S', str(binary))
+        # Preserve third-party symbols/metadata. Some system-distributed Mach-O
+        # files cannot be safely stripped; signing must follow all modifications.
         run('/usr/bin/codesign', '--force', '--timestamp=none', '--sign', '-', str(binary))
         run('/usr/bin/codesign', '--verify', '--strict', str(binary))
         identity_lines = run('/usr/bin/otool', '-D', str(binary)).splitlines()[1:]
