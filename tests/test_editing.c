@@ -17,11 +17,11 @@ int main(void)
         fprintf(stderr, "Semantic version mismatch: expected 0x%08X, got 0x%08X\n", AC_BUILD_VERSION, ac_version());
         return 1;
     }
-    if (strcmp(ac_version_string(), "5.0.0") != 0) {
+    if (strcmp(ac_version_string(), "5.1.0") != 0) {
         fprintf(stderr, "Version string mismatch: %s\n", ac_version_string());
         return 1;
     }
-    if (ac_has_feature("keyframes") != 1 || ac_has_feature("__invalid_tag__") != 0) {
+    if (ac_has_feature("keyframes") != 1 || ac_has_feature("video_session") != 1 || ac_has_feature("__invalid_tag__") != 0) {
         fprintf(stderr, "Feature query check failed\n");
         return 1;
     }

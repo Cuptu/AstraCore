@@ -1,5 +1,21 @@
 # AstraCore
 
+The native ABI is 5, with API version 5.1.0 including persistent video sessions
+(`ac_video_open_session_utf8`, `ac_video_session_grab_frame`, and
+`ac_video_close_session`). Query `ac_has_feature("video_session")` before using
+these APIs. Additive session exports do not change the existing ABI major.
+
+The runtime also ships libmpv as an independent client library. AstraCore's C
+functions use FFmpeg directly; AstraCore does not wrap or call libmpv. Consumers
+that use libmpv preview must call its client/render APIs themselves. Sharing the
+FFmpeg libraries avoids shipping duplicate library copies; it does not imply
+that independent decoding contexts are shared between AstraCore and libmpv.
+
+Release verification dynamically loads both native and libmpv components and
+decodes real video through persistent sessions with build-library environment
+overrides removed. macOS runtime relocation and re-signing finish before that
+execution check.
+
 AstraCore is a lightweight, high-performance native media engine built on a unified **FFmpeg 9.0.1** and **libmpv (0.41.0+)** foundation. It provides a minimal-overhead C ABI tailored for audio-visual editing workstations, high-precision subtitle typography engines, and speech recognition pipelines.
 
 Rather than spawning separate CLI subprocesses or maintaining heavyweight interop layers, AstraCore exposes native operations directly into memory—providing sub-millisecond container probing, packet-level keyframe discovery, zero-copy peak waveform and STFT spectrogram extraction, in-memory frame grabbing with colorspace conversion, lossless container trimming, and HDR10/HLG mastering metadata probing.
@@ -38,7 +54,7 @@ Rather than spawning separate CLI subprocesses or maintaining heavyweight intero
 
 ## Key Features
 
-- **Unified Shared Core**: `AstraCore.Native`, `libmpv`, `ffmpeg`, and `ffprobe` all dynamically link against the exact same shared `libav*` binaries, eliminating duplicate decode pipelines and shrinking the runtime footprint from >160 MB to ~35 MB.
+- **Shared FFmpeg Libraries**: `AstraCore.Native`, `libmpv`, `ffmpeg`, and `ffprobe` are built against the same shared `libav*` libraries. Each consumer manages its own decoding contexts; library sharing avoids duplicate FFmpeg binary copies.
 - **Fast Demuxer-Level Keyframe Discovery**: `ac_extract_keyframes_cancel_utf8` inspects container packet headers (`AV_PKT_FLAG_KEY`) without decoding video frames, returning complete millisecond timestamps of all seek points in linear time.
 - **In-Memory Frame Grabber & Scaler**: `ac_grab_frame_image_cancel_utf8` seeks to target timestamps, decodes single video frames, and converts pixel formats via `libswscale` directly into caller-allocated buffers (`RGBA`, `BGRA`, `RGB24`, `GRAY8`, `NV12`, `YUV420P`) for instant timeline thumbnails and OCR.
 - **VFR Timecodes v2 Exporter**: `ac_extract_timecodes_cancel_utf8` traverses packet presentation timestamps (PTS) and exports standard Matroska / Aegisub v2 timecode files for variable frame rate synchronization.
@@ -80,7 +96,7 @@ Header location: [`include/astracore.h`](include/astracore.h)
 
 // Semantic Version Triplet
 #define AC_VERSION_MAJOR 5u
-#define AC_VERSION_MINOR 0u
+#define AC_VERSION_MINOR 1u
 #define AC_VERSION_PATCH 0u
 
 // Legacy single-scalar ABI revision (returns AC_VERSION_MAJOR, e.g. 5u)
@@ -89,7 +105,7 @@ uint32_t ac_abi_version(void);
 // Packed semantic version integer: (MAJOR << 16) | (MINOR << 8) | PATCH
 uint32_t ac_version(void);
 
-// Semantic version string literal: "5.0.0"
+// Semantic version string literal: "5.1.0"
 const char *ac_version_string(void);
 
 // Query runtime engine capabilities ("keyframes", "spectrogram", "frame_grabber", "hdr_prober", etc.)

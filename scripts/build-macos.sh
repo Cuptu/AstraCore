@@ -145,54 +145,10 @@ cmake --install "$build_root/native"
 
 echo "==> Assembling standalone macOS runtime package in $ASTRACORE_OUTPUT..."
 cp -P "$prefix/bin/ffmpeg" "$prefix/bin/ffprobe" "$ASTRACORE_OUTPUT/"
-cp -P "$prefix/lib"/lib*.dylib "$ASTRACORE_OUTPUT/" 2>/dev/null || true
+cp -P "$prefix/lib"/lib*.dylib "$ASTRACORE_OUTPUT/"
 
-echo "==> Relocating Mach-O install names with install_name_tool..."
-for dylib in "$ASTRACORE_OUTPUT"/lib*.dylib; do
-    [[ -f "$dylib" && ! -L "$dylib" ]] || continue
-    name="$(basename "$dylib")"
-    install_name_tool -id "@rpath/$name" "$dylib" 2>/dev/null || true
-done
-
-for bin in "$ASTRACORE_OUTPUT"/*; do
-    [[ -f "$bin" && ! -L "$bin" ]] || continue
-    # Add @loader_path to RPATH
-    install_name_tool -add_rpath "@loader_path" "$bin" 2>/dev/null || true
-    # Fix references to prefix libraries
-    for dylib in "$ASTRACORE_OUTPUT"/lib*.dylib; do
-        [[ -f "$dylib" && ! -L "$dylib" ]] || continue
-        name="$(basename "$dylib")"
-        install_name_tool -change "$prefix/lib/$name" "@rpath/$name" "$bin" 2>/dev/null || true
-    done
-done
-
-echo "==> Resolving and bundling external non-system dependencies (Homebrew/local)..."
-changed=1
-while [[ $changed -eq 1 ]]; do
-    changed=0
-    for bin in "$ASTRACORE_OUTPUT"/*; do
-        [[ -f "$bin" && ! -L "$bin" ]] || continue
-        for dep in $(otool -L "$bin" 2>/dev/null | awk '{print $1}' | grep -E '^/(opt/homebrew|usr/local)' || true); do
-            dep_name="$(basename "$dep")"
-            if [[ ! -f "$ASTRACORE_OUTPUT/$dep_name" ]]; then
-                echo "Bundling non-system dependency: $dep"
-                cp -L "$dep" "$ASTRACORE_OUTPUT/$dep_name"
-                chmod 755 "$ASTRACORE_OUTPUT/$dep_name"
-                install_name_tool -id "@rpath/$dep_name" "$ASTRACORE_OUTPUT/$dep_name" 2>/dev/null || true
-                install_name_tool -add_rpath "@loader_path" "$ASTRACORE_OUTPUT/$dep_name" 2>/dev/null || true
-                changed=1
-            fi
-            install_name_tool -change "$dep" "@rpath/$dep_name" "$bin" 2>/dev/null || true
-        done
-    done
-done
-
-echo "==> Stripping binaries..."
-for bin in "$ASTRACORE_OUTPUT"/*; do
-    if [[ -f "$bin" && ! -L "$bin" ]]; then
-        strip -S "$bin" 2>/dev/null || true
-    fi
-done
+echo "==> Relocating and signing the complete Mach-O dependency closure..."
+python3 "$ASTRACORE_REPO/scripts/relocate-macos.py" "$ASTRACORE_OUTPUT"
 
 mkdir -p "$ASTRACORE_OUTPUT/LICENSES"
 cp -f "$ASTRACORE_REPO/LICENSE" "$ASTRACORE_OUTPUT/LICENSES/AstraCore-GPL-3.0.txt"

@@ -59,11 +59,12 @@ def main():
     ffmpeg_bin = os.path.join(runtime_dir, manifest["components"]["ffmpeg"])
     ffprobe_bin = os.path.join(runtime_dir, manifest["components"]["ffprobe"])
 
-    # Prepare environment with runtime_dir in PATH/LD_LIBRARY_PATH/DYLD_LIBRARY_PATH
+    # Do not let the build prefix hide non-relocatable dependency references.
     env = os.environ.copy()
-    env["PATH"] = f"{runtime_dir}{os.pathsep}{env.get('PATH', '')}"
-    env["LD_LIBRARY_PATH"] = f"{runtime_dir}{os.pathsep}{env.get('LD_LIBRARY_PATH', '')}"
-    env["DYLD_LIBRARY_PATH"] = f"{runtime_dir}{os.pathsep}{env.get('DYLD_LIBRARY_PATH', '')}"
+    system_path = os.path.join(os.environ.get("SystemRoot", "C:\\Windows"), "System32") if os.name == "nt" else "/usr/bin:/bin"
+    env["PATH"] = f"{runtime_dir}{os.pathsep}{system_path}"
+    for key in ("LD_LIBRARY_PATH", "LD_PRELOAD", "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES"):
+        env.pop(key, None)
 
     print("==> Checking ffprobe...")
     run_cmd([ffprobe_bin, "-hide_banner", "-version"], env=env)
@@ -84,6 +85,8 @@ def main():
         if flt not in filters_out:
             sys.exit(f"Error: Required filter missing: {flt}")
 
+    print("==> Testing deployed native video sessions and independent libmpv...")
+    print(run_cmd([sys.executable, os.path.join(os.path.dirname(__file__), "test-native-runtime.py"), runtime_dir], env=env))
     print("==> All verification checks passed successfully!")
 
 if __name__ == "__main__":

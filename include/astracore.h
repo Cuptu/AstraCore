@@ -35,7 +35,7 @@ extern "C" {
  *   Callers checking feature availability should invoke ac_has_feature().
  */
 #define AC_VERSION_MAJOR 5u
-#define AC_VERSION_MINOR 0u
+#define AC_VERSION_MINOR 1u
 #define AC_VERSION_PATCH 0u
 
 #define AC_VERSION_INT(major, minor, patch) \
@@ -88,6 +88,7 @@ AC_API const char *ac_version_string(void);
  *   - "waveform"        : ac_extract_waveform_peaks_utf8 / _cancel_utf8
  *   - "audio_tempo"     : ac_change_audio_speed_utf8 / _cancel_utf8
  *   - "lossless_trim"   : ac_trim_media_utf8 / _cancel_utf8
+ *   - "video_session"   : ac_video_open_session_utf8 / ac_video_session_grab_frame
  *   - "swscale"         : libswscale pixel conversions
  */
 AC_API int ac_has_feature(const char *feature_name);
@@ -366,6 +367,7 @@ typedef struct ac_hdr_metadata {
     int32_t color_space;        /* AVColorSpace (e.g. 9 = BT.2020 non-constant luminance) */
     double max_cll;             /* Maximum Content Light Level in nits (0.0 if not specified) */
     double max_fall;            /* Maximum Frame-Average Light Level in nits (0.0 if not specified) */
+    int32_t color_range;        /* AVColorRange; optional tail field in the extended struct */
 } ac_hdr_metadata;
 
 /*
@@ -386,9 +388,36 @@ AC_API int ac_probe_hdr_utf8(
     char *error_buffer,
     size_t error_buffer_size);
 
+/*
+ * 6. Persistent Video Decoding Session:
+ * Maintains open container and codec contexts across multiple sequential or random-access
+ * frame grab requests, eliminating repetitive container probing and codec init overhead.
+ */
+typedef struct AcVideoSession AcVideoSession;
+
+AC_API AcVideoSession *ac_video_open_session_utf8(
+    const char *path,
+    char *error_buffer,
+    size_t error_buffer_size);
+
+AC_API int ac_video_session_grab_frame(
+    AcVideoSession *session,
+    double target_seconds,
+    int target_width,
+    int target_height,
+    int pix_fmt,
+    uint8_t *out_image_buffer,
+    size_t buffer_size,
+    int *out_width,
+    int *out_height,
+    double *out_actual_seconds,
+    char *error_buffer,
+    size_t error_buffer_size);
+
+AC_API void ac_video_close_session(AcVideoSession *session);
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif
-

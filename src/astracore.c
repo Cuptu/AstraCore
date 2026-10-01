@@ -142,7 +142,7 @@ uint32_t ac_version(void)
 
 const char *ac_version_string(void)
 {
-    return "5.0.0";
+    return "5.1.0";
 }
 
 int ac_has_feature(const char *feature_name)
@@ -164,6 +164,8 @@ int ac_has_feature(const char *feature_name)
     if (strcmp(feature_name, "audio_tempo") == 0)
         return 1;
     if (strcmp(feature_name, "lossless_trim") == 0)
+        return 1;
+    if (strcmp(feature_name, "video_session") == 0)
         return 1;
     if (strcmp(feature_name, "swscale") == 0)
         return 1;
@@ -261,7 +263,7 @@ int ac_check_encoder(const char *encoder_name)
         ctx->time_base = (AVRational){1, 30};
         ctx->framerate = (AVRational){30, 1};
         ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(61, 0, 0)
+#if defined(ASTRA_HAVE_SUPPORTED_CONFIG)
         const void *out_configs = NULL;
         if (avcodec_get_supported_config(NULL, codec, AV_CODEC_CONFIG_PIX_FORMAT, 0, &out_configs, NULL) >= 0 && out_configs) {
             const enum AVPixelFormat *fmts = (const enum AVPixelFormat *)out_configs;
@@ -279,7 +281,7 @@ int ac_check_encoder(const char *encoder_name)
         AVChannelLayout layout = AV_CHANNEL_LAYOUT_STEREO;
         av_channel_layout_copy(&ctx->ch_layout, &layout);
         ctx->sample_fmt = AV_SAMPLE_FMT_S16;
-#if LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(61, 0, 0)
+#if defined(ASTRA_HAVE_SUPPORTED_CONFIG)
         const void *out_configs = NULL;
         if (avcodec_get_supported_config(NULL, codec, AV_CODEC_CONFIG_SAMPLE_FORMAT, 0, &out_configs, NULL) >= 0 && out_configs) {
             const enum AVSampleFormat *fmts = (const enum AVSampleFormat *)out_configs;
@@ -1896,13 +1898,15 @@ int ac_probe_hdr_cancel_utf8(
     AVFormatContext *format_ctx = NULL;
     int code = 0;
 
-    if (!path || !result || result->struct_size < sizeof(ac_hdr_metadata)) {
+    const size_t legacy_size = offsetof(ac_hdr_metadata, color_range);
+    if (!path || !result || result->struct_size < legacy_size) {
         code = AVERROR(EINVAL);
         ac_write_error(code, error_buffer, error_buffer_size);
         return code;
     }
 
-    memset((char *)result + sizeof(result->struct_size), 0, sizeof(*result) - sizeof(result->struct_size));
+    const size_t writable_size = result->struct_size < sizeof(*result) ? result->struct_size : sizeof(*result);
+    memset((char *)result + sizeof(result->struct_size), 0, writable_size - sizeof(result->struct_size));
 
     AcInterruptContext int_ctx = { cancel_cb, cancel_opaque };
     if (cancel_cb) {
@@ -1933,6 +1937,8 @@ int ac_probe_hdr_cancel_utf8(
     result->color_primaries = par->color_primaries;
     result->color_transfer = par->color_trc;
     result->color_space = par->color_space;
+    if (writable_size >= offsetof(ac_hdr_metadata, color_range) + sizeof(result->color_range))
+        result->color_range = par->color_range;
 
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(par->format);
     if (desc && desc->nb_components > 0) {
@@ -1954,7 +1960,7 @@ int ac_probe_hdr_cancel_utf8(
     for (int i = 0; i < par->nb_coded_side_data; ++i) {
         if (par->coded_side_data[i].type == AV_PKT_DATA_CONTENT_LIGHT_LEVEL) {
             const AVContentLightMetadata *cll = (const AVContentLightMetadata *)par->coded_side_data[i].data;
-            if (cll) {
+            if (cll && par->coded_side_data[i].size >= sizeof(*cll)) {
                 result->max_cll = (double)cll->MaxCLL;
                 result->max_fall = (double)cll->MaxFALL;
             }
@@ -1980,3 +1986,268 @@ int ac_probe_hdr_utf8(
     return ac_probe_hdr_cancel_utf8(path, result, NULL, NULL, error_buffer, error_buffer_size);
 }
 
+struct AcVideoSession {
+    AVFormatContext *format_ctx;
+    AVCodecContext *codec_ctx;
+    struct SwsContext *sws_ctx;
+    AVPacket *packet;
+    AVFrame *frame;
+    AVFrame *rgb_frame;
+    int video_stream_idx;
+    AVRational time_base;
+    int width;
+    int height;
+    int last_dst_w;
+    int last_dst_h;
+    int last_pix_fmt;
+    enum AVPixelFormat last_src_pix_fmt;
+    double last_pts;
+};
+
+AcVideoSession *ac_video_open_session_utf8(
+    const char *path,
+    char *error_buffer,
+    size_t error_buffer_size)
+{
+    if (!path) {
+        ac_write_error(AVERROR(EINVAL), error_buffer, error_buffer_size);
+        return NULL;
+    }
+
+    AcVideoSession *session = (AcVideoSession *)calloc(1, sizeof(AcVideoSession));
+    if (!session) {
+        ac_write_error(AVERROR(ENOMEM), error_buffer, error_buffer_size);
+        return NULL;
+    }
+
+    int code = avformat_open_input(&session->format_ctx, path, NULL, NULL);
+    if (code < 0) {
+        ac_write_error(code, error_buffer, error_buffer_size);
+        free(session);
+        return NULL;
+    }
+
+    code = avformat_find_stream_info(session->format_ctx, NULL);
+    if (code < 0) {
+        ac_write_error(code, error_buffer, error_buffer_size);
+        avformat_close_input(&session->format_ctx);
+        free(session);
+        return NULL;
+    }
+
+    session->video_stream_idx = av_find_best_stream(session->format_ctx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
+    if (session->video_stream_idx < 0) {
+        ac_write_error(session->video_stream_idx, error_buffer, error_buffer_size);
+        avformat_close_input(&session->format_ctx);
+        free(session);
+        return NULL;
+    }
+
+    AVStream *vstream = session->format_ctx->streams[session->video_stream_idx];
+    const AVCodec *decoder = avcodec_find_decoder(vstream->codecpar->codec_id);
+    if (!decoder) {
+        ac_write_error(AVERROR_DECODER_NOT_FOUND, error_buffer, error_buffer_size);
+        avformat_close_input(&session->format_ctx);
+        free(session);
+        return NULL;
+    }
+
+    session->codec_ctx = avcodec_alloc_context3(decoder);
+    if (!session->codec_ctx) {
+        ac_write_error(AVERROR(ENOMEM), error_buffer, error_buffer_size);
+        avformat_close_input(&session->format_ctx);
+        free(session);
+        return NULL;
+    }
+
+    code = avcodec_parameters_to_context(session->codec_ctx, vstream->codecpar);
+    if (code < 0) {
+        ac_write_error(code, error_buffer, error_buffer_size);
+        avcodec_free_context(&session->codec_ctx);
+        avformat_close_input(&session->format_ctx);
+        free(session);
+        return NULL;
+    }
+
+    code = avcodec_open2(session->codec_ctx, decoder, NULL);
+    if (code < 0) {
+        ac_write_error(code, error_buffer, error_buffer_size);
+        avcodec_free_context(&session->codec_ctx);
+        avformat_close_input(&session->format_ctx);
+        free(session);
+        return NULL;
+    }
+
+    session->packet = av_packet_alloc();
+    session->frame = av_frame_alloc();
+    session->rgb_frame = av_frame_alloc();
+    if (!session->packet || !session->frame || !session->rgb_frame) {
+        ac_write_error(AVERROR(ENOMEM), error_buffer, error_buffer_size);
+        ac_video_close_session(session);
+        return NULL;
+    }
+
+    session->time_base = vstream->time_base;
+    session->width = session->codec_ctx->width;
+    session->height = session->codec_ctx->height;
+    session->last_pts = -100.0;
+    session->last_dst_w = 0;
+    session->last_dst_h = 0;
+    session->last_pix_fmt = -1;
+    session->last_src_pix_fmt = AV_PIX_FMT_NONE;
+
+    return session;
+}
+
+int ac_video_session_grab_frame(
+    AcVideoSession *session,
+    double target_seconds,
+    int target_width,
+    int target_height,
+    int pix_fmt,
+    uint8_t *out_image_buffer,
+    size_t buffer_size,
+    int *out_width,
+    int *out_height,
+    double *out_actual_seconds,
+    char *error_buffer,
+    size_t error_buffer_size)
+{
+    if (!session || !session->format_ctx || !session->codec_ctx || !out_image_buffer) {
+        ac_write_error(AVERROR(EINVAL), error_buffer, error_buffer_size);
+        return AVERROR(EINVAL);
+    }
+
+    int dst_w = (target_width > 0) ? target_width : session->codec_ctx->width;
+    int dst_h = (target_height > 0) ? target_height : session->codec_ctx->height;
+    enum AVPixelFormat dst_pix_fmt = (pix_fmt == 1) ? AV_PIX_FMT_RGBA :
+                                    ((pix_fmt == 2) ? AV_PIX_FMT_BGRA : AV_PIX_FMT_RGB24);
+
+    int required_size = av_image_get_buffer_size(dst_pix_fmt, dst_w, dst_h, 1);
+    if ((size_t)required_size > buffer_size) {
+        ac_write_error(AVERROR(ENOBUFS), error_buffer, error_buffer_size);
+        return AVERROR(ENOBUFS);
+    }
+
+    /* The previous request consumed last_pts. Re-reading that position must
+       seek rather than silently advance to the following decoded frame. */
+    int need_seek = (target_seconds <= session->last_pts + 0.001) || (target_seconds > session->last_pts + 1.0);
+    if (need_seek) {
+        int64_t target_ts = (int64_t)(target_seconds / av_q2d(session->time_base));
+        avformat_seek_file(session->format_ctx, session->video_stream_idx, INT64_MIN, target_ts, target_ts, AVSEEK_FLAG_BACKWARD);
+        avcodec_flush_buffers(session->codec_ctx);
+        session->last_pts = -100.0;
+    }
+
+    int frame_decoded = 0;
+    double best_pts = 0.0;
+
+    while (avcodec_receive_frame(session->codec_ctx, session->frame) >= 0) {
+        double pts = (session->frame->pts != AV_NOPTS_VALUE)
+            ? (double)session->frame->pts * av_q2d(session->time_base)
+            : ((session->frame->pkt_dts != AV_NOPTS_VALUE) ? (double)session->frame->pkt_dts * av_q2d(session->time_base) : 0.0);
+
+        best_pts = pts;
+        session->last_pts = pts;
+
+        if (!session->sws_ctx || session->last_dst_w != dst_w || session->last_dst_h != dst_h ||
+            session->last_pix_fmt != pix_fmt || session->last_src_pix_fmt != session->frame->format) {
+            if (session->sws_ctx) sws_freeContext(session->sws_ctx);
+            session->sws_ctx = sws_getContext(
+                session->codec_ctx->width, session->codec_ctx->height, (enum AVPixelFormat)session->frame->format,
+                dst_w, dst_h, dst_pix_fmt,
+                SWS_BILINEAR, NULL, NULL, NULL);
+            session->last_dst_w = dst_w;
+            session->last_dst_h = dst_h;
+            session->last_pix_fmt = pix_fmt;
+            session->last_src_pix_fmt = (enum AVPixelFormat)session->frame->format;
+        }
+
+        if (session->sws_ctx) {
+            av_image_fill_arrays(session->rgb_frame->data, session->rgb_frame->linesize,
+                                 out_image_buffer, dst_pix_fmt, dst_w, dst_h, 1);
+            sws_scale(session->sws_ctx, (const uint8_t *const *)session->frame->data,
+                      session->frame->linesize, 0, session->codec_ctx->height,
+                      session->rgb_frame->data, session->rgb_frame->linesize);
+            frame_decoded = 1;
+        }
+
+        if (pts >= target_seconds - 0.001) {
+            av_frame_unref(session->frame);
+            goto frame_done;
+        }
+        av_frame_unref(session->frame);
+    }
+
+    while (av_read_frame(session->format_ctx, session->packet) >= 0) {
+        if (session->packet->stream_index == session->video_stream_idx) {
+            int ret = avcodec_send_packet(session->codec_ctx, session->packet);
+            if (ret < 0) {
+                av_packet_unref(session->packet);
+                break;
+            }
+
+            while (avcodec_receive_frame(session->codec_ctx, session->frame) >= 0) {
+                double pts = (session->frame->pts != AV_NOPTS_VALUE)
+                    ? (double)session->frame->pts * av_q2d(session->time_base)
+                    : ((session->frame->pkt_dts != AV_NOPTS_VALUE) ? (double)session->frame->pkt_dts * av_q2d(session->time_base) : 0.0);
+
+                best_pts = pts;
+                session->last_pts = pts;
+
+                if (!session->sws_ctx || session->last_dst_w != dst_w || session->last_dst_h != dst_h ||
+                    session->last_pix_fmt != pix_fmt || session->last_src_pix_fmt != session->frame->format) {
+                    if (session->sws_ctx) sws_freeContext(session->sws_ctx);
+                    session->sws_ctx = sws_getContext(
+                        session->codec_ctx->width, session->codec_ctx->height, (enum AVPixelFormat)session->frame->format,
+                        dst_w, dst_h, dst_pix_fmt,
+                        SWS_BILINEAR, NULL, NULL, NULL);
+                    session->last_dst_w = dst_w;
+                    session->last_dst_h = dst_h;
+                    session->last_pix_fmt = pix_fmt;
+                    session->last_src_pix_fmt = (enum AVPixelFormat)session->frame->format;
+                }
+
+                if (session->sws_ctx) {
+                    av_image_fill_arrays(session->rgb_frame->data, session->rgb_frame->linesize,
+                                         out_image_buffer, dst_pix_fmt, dst_w, dst_h, 1);
+                    sws_scale(session->sws_ctx, (const uint8_t *const *)session->frame->data,
+                              session->frame->linesize, 0, session->codec_ctx->height,
+                              session->rgb_frame->data, session->rgb_frame->linesize);
+                    frame_decoded = 1;
+                }
+
+                if (pts >= target_seconds - 0.001) {
+                    av_frame_unref(session->frame);
+                    av_packet_unref(session->packet);
+                    goto frame_done;
+                }
+                av_frame_unref(session->frame);
+            }
+        }
+        av_packet_unref(session->packet);
+    }
+
+frame_done:
+    if (!frame_decoded) {
+        ac_write_error(AVERROR(ENOENT), error_buffer, error_buffer_size);
+        return AVERROR(ENOENT);
+    }
+
+    if (out_width) *out_width = dst_w;
+    if (out_height) *out_height = dst_h;
+    if (out_actual_seconds) *out_actual_seconds = best_pts;
+    return 0;
+}
+
+void ac_video_close_session(AcVideoSession *session)
+{
+    if (!session) return;
+    if (session->sws_ctx) sws_freeContext(session->sws_ctx);
+    if (session->rgb_frame) av_frame_free(&session->rgb_frame);
+    if (session->frame) av_frame_free(&session->frame);
+    if (session->packet) av_packet_free(&session->packet);
+    if (session->codec_ctx) avcodec_free_context(&session->codec_ctx);
+    if (session->format_ctx) avformat_close_input(&session->format_ctx);
+    free(session);
+}
