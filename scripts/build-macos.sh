@@ -32,6 +32,8 @@ export PKG_CONFIG_PATH="$prefix/lib/pkgconfig:$brew_prefix/lib/pkgconfig:$brew_p
 for d in "$brew_prefix"/opt/*/lib/pkgconfig; do
     [[ -d "$d" ]] && PKG_CONFIG_PATH="$d:$PKG_CONFIG_PATH"
 done
+# Prefer the pinned libraries built in this prefix over Homebrew FFmpeg/ass.
+PKG_CONFIG_PATH="$prefix/lib/pkgconfig:$PKG_CONFIG_PATH"
 export PKG_CONFIG_PATH
 export CPATH="$prefix/include:$brew_prefix/include:$brew_prefix/opt/vulkan-headers/include:${CPATH:-}"
 export LIBRARY_PATH="$prefix/lib:$brew_prefix/lib:${LIBRARY_PATH:-}"
