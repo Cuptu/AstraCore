@@ -178,6 +178,10 @@ jobs:
           mkdir -p dist
           python3 -c "import shutil, sys; shutil.make_archive(sys.argv[1], sys.argv[2], sys.argv[3])" "dist/AstraCore-${{ matrix.rid }}" "${{ matrix.archive_format }}" "artifacts/astracore/${{ matrix.rid }}"
 
+      - name: Verify Extracted Runtime Archive
+        shell: bash
+        run: python3 ./scripts/verify-archive.py "dist/AstraCore-${{ matrix.rid }}.${{ matrix.archive_ext }}"
+
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:

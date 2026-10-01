@@ -4,6 +4,7 @@ endif()
 file(MAKE_DIRECTORY "${WORK_DIR}")
 set(media "${WORK_DIR}/native-media.mkv")
 set(color_media "${WORK_DIR}/native-color-metadata.mkv")
+set(delayed_media "${WORK_DIR}/native-bframes.mkv")
 execute_process(COMMAND "${PYTHON}" "${CMAKE_CURRENT_LIST_DIR}/../scripts/make-test-inputs.py" "${WORK_DIR}"
     RESULT_VARIABLE generated ERROR_VARIABLE error)
 if(NOT generated EQUAL 0)
@@ -30,7 +31,13 @@ message(STATUS "${output}")
 if(NOT tested EQUAL 0)
     message(FATAL_ERROR "Real media probe/audio extraction failed (${tested}): ${error}")
 endif()
-execute_process(COMMAND "${VIDEO}" "${media}" "${color_media}" WORKING_DIRECTORY "${WORK_DIR}"
+execute_process(COMMAND "${FFMPEG}" -nostdin -v error -y
+    -framerate 10 -i "${WORK_DIR}/frame%02d.png" -c:v libx264 -bf 3 -crf 18 -pix_fmt yuv420p "${delayed_media}"
+    RESULT_VARIABLE generated ERROR_VARIABLE error)
+if(NOT generated EQUAL 0)
+    message(FATAL_ERROR "B-frame fixture generation failed: ${error}")
+endif()
+execute_process(COMMAND "${VIDEO}" "${media}" "${color_media}" "${delayed_media}" WORKING_DIRECTORY "${WORK_DIR}"
     RESULT_VARIABLE tested OUTPUT_VARIABLE output ERROR_VARIABLE error)
 message(STATUS "${output}")
 if(NOT tested EQUAL 0)

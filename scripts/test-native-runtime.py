@@ -41,7 +41,7 @@ def main():
         media = Path(temp) / 'fixture.mkv'
         subprocess.run([str(runtime / manifest['components']['ffmpeg']), '-nostdin', '-v', 'error', '-y',
             '-framerate', '10', '-i', str(Path(temp) / 'frame%02d.png'), '-i', str(Path(temp) / 'tone.wav'),
-            '-c:v', 'libx264', '-bf', '0', '-qp', '0', '-pix_fmt', 'yuv420p',
+            '-c:v', 'libx264', '-bf', '3', '-crf', '18', '-pix_fmt', 'yuv420p',
             '-c:a', 'pcm_s16le', '-shortest', str(media)], check=True, timeout=30)
         error = c.create_string_buffer(512)
         session = open_session(str(media).encode('utf8'), error, len(error))

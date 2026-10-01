@@ -65,6 +65,8 @@ def main():
     env["PATH"] = f"{runtime_dir}{os.pathsep}{system_path}"
     for key in ("LD_LIBRARY_PATH", "LD_PRELOAD", "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES"):
         env.pop(key, None)
+    print("==> Auditing packaged FFmpeg dependency closure...")
+    print(run_cmd([sys.executable, os.path.join(os.path.dirname(__file__), "verify-media-dependencies.py"), runtime_dir], env=env))
 
     print("==> Checking ffprobe...")
     run_cmd([ffprobe_bin, "-hide_banner", "-version"], env=env)
