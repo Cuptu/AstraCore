@@ -49,6 +49,9 @@ get_pinned_source "ffmpeg" "https://github.com/FFmpeg/FFmpeg.git" "bf1b838f2ab88
 get_pinned_source "mpv" "https://github.com/mpv-player/mpv.git" "41f6a645068483470267271e1d09966ca3b9f413" ""
 get_pinned_source "libass" "https://github.com/libass/libass.git" "4a05d8127f525943ebf45fdc6497c9e665947f0d" ""
 get_pinned_source "libplacebo" "https://code.videolan.org/videolan/libplacebo.git" "cee9b076f2c63104ccfd497fa79c39a867293ec4" "https://github.com/haasn/libplacebo.git"
+# Older libc++ releases do not provide floating-point std::from_chars.
+# Use the fast_float revision recorded by libplacebo's pinned gitlink.
+git -C "$DEST_ROOT/libplacebo" submodule update --init --depth 1 -- 3rdparty/fast_float
 get_pinned_source "x265" "https://bitbucket.org/multicoreware/x265_git.git" "e444744c03978c1fb4e037168967020cf2648427" "https://github.com/videolan/x265.git"
 get_pinned_source "harfbuzz" "https://github.com/harfbuzz/harfbuzz.git" "36cb489cb02ce4b92099669ba9f9bea348eff93f" ""
 get_pinned_source "dav1d" "https://code.videolan.org/videolan/dav1d.git" "54706fc6bc0cdecab7e9593974a4039cc038fca7" "https://github.com/videolan/dav1d.git"
