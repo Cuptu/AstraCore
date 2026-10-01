@@ -129,7 +129,7 @@ meson setup "$build_root/mpv" "$ASTRACORE_MPV_SOURCE" \
     -Dlua=disabled -Djavascript=disabled -Dcplugins=disabled \
     -Dlibavdevice=disabled -Dplain-gl=enabled -Dgl=enabled \
     -Dvulkan=disabled -Dcoreaudio=enabled -Dcocoa=enabled \
-    -Dswift-build=disabled \
+    -Dswift-build=enabled \
     -Diconv=enabled -Djpeg=disabled -Dlcms2=enabled -Dzlib=enabled
 meson compile -C "$build_root/mpv"
 
